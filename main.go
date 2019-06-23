@@ -90,6 +90,8 @@ func handleRequest(bot *tgbotapi.BotAPI, chatId int64) func(w http.ResponseWrite
 
 		_, err := bot.Send(msg)
 
+		fmt.Printf("Message sended to telegram. Id: %s. Name: %s. Text: %s\n", message.ID, message.Name, message.Message)
+
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -102,13 +104,15 @@ func getRabbitSender(channel *amqp.Channel) func(message SendResponse) {
 
 		err := channel.Publish(
 			"",
-			"main.client.event",
+			os.Getenv("BOT_AMQP_QUEUE"),
 			false,
 			false,
 			amqp.Publishing{
 				ContentType: "text/plain",
 				Body:        []byte(jsonMessage),
 			})
+
+		fmt.Printf("Message sended to rabbitmq. Id: %s. Text: %s\n", message.ID, message.Message)
 
 		failOnError(err, "Failed to publish a message")
 	}
