@@ -4,17 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/streadway/amqp"
 	"golang.org/x/net/proxy"
 )
 
 type SendRequest struct {
 	ID      string
 	Name    string
+	Message string
+}
+
+type SendResponse struct {
+	ID      string
 	Message string
 }
 
@@ -27,7 +34,38 @@ func main() {
 
 	go http.ListenAndServe(os.Getenv("BOT_PORT"), nil)
 
-	handleBot(bot, chatId)
+	rabbitConnect := getRabbitConnect()
+
+	rabbitChannel := getRabbitChannel(rabbitConnect)
+
+	handleBot(bot, chatId, rabbitChannel)
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %s", msg, err)
+	}
+}
+
+func getRabbitConnect() *amqp.Connection {
+	connect, err := amqp.Dial("amqp://" +
+		os.Getenv("BOT_AMQP_USER") +
+		":" +
+		os.Getenv("BOT_AMQP_PASSWORD") +
+		"@" +
+		os.Getenv("BOT_AMQP_HOST"))
+
+	failOnError(err, "Failed to connect to RabbitMQ")
+
+	return connect
+}
+
+func getRabbitChannel(connect *amqp.Connection) *amqp.Channel {
+	ch, err := connect.Channel()
+
+	failOnError(err, "Failed to open a channel")
+
+	return ch
 }
 
 func createBot() *tgbotapi.BotAPI {
@@ -58,7 +96,25 @@ func handleRequest(bot *tgbotapi.BotAPI, chatId int64) func(w http.ResponseWrite
 	}
 }
 
-func handleBot(bot *tgbotapi.BotAPI, chatId int64) {
+func getRabbitSender(channel *amqp.Channel) func(message SendResponse) {
+	return func(message SendResponse) {
+		jsonMessage, _ := json.Marshal(message)
+
+		err := channel.Publish(
+			"",
+			"main.client.event",
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        []byte(jsonMessage),
+			})
+
+		failOnError(err, "Failed to publish a message")
+	}
+}
+
+func handleBot(bot *tgbotapi.BotAPI, chatId int64, channel *amqp.Channel) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -71,9 +127,7 @@ func handleBot(bot *tgbotapi.BotAPI, chatId int64) {
 	userId := "none"
 
 	for update := range updates {
-		msg, err := botUpdateProcessor(update, &userId, chatId, func() {
-			// Todo rabbit
-		})
+		msg, err := botUpdateProcessor(update, &userId, chatId, getRabbitSender(channel))
 
 		if err != nil {
 			continue
@@ -152,7 +206,7 @@ func generateBotRequestMessage(message string, requestId string, chatId int64) t
 	return msg
 }
 
-func botUpdateProcessor(update tgbotapi.Update, userId *string, chatId int64, rabbitSender func()) (tgbotapi.MessageConfig, error) {
+func botUpdateProcessor(update tgbotapi.Update, userId *string, chatId int64, rabbitSender func(message SendResponse)) (tgbotapi.MessageConfig, error) {
 	var msg tgbotapi.MessageConfig
 
 	switch {
@@ -167,7 +221,10 @@ func botUpdateProcessor(update tgbotapi.Update, userId *string, chatId int64, ra
 			} else {
 				msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Вы ответили пользователю с ID "+*userId)
 
-				rabbitSender()
+				rabbitSender(SendResponse{
+					ID:      *userId,
+					Message: update.Message.Text,
+				})
 			}
 
 			return msg, nil
