@@ -133,7 +133,7 @@ func handleBot(bot *tgbotapi.BotAPI, chatId int64, channel *amqp.Channel) {
 		msg, err := botUpdateProcessor(update, &userId, chatId, getRabbitSender(channel))
 
 		if err != nil {
-			continue
+			fmt.Println(err)
 		}
 
 		_, err = bot.Send(msg)
