@@ -16,7 +16,6 @@ import (
 
 type SendRequest struct {
 	ID      string
-	Name    string
 	Message string
 }
 
@@ -90,7 +89,7 @@ func handleRequest(bot *tgbotapi.BotAPI, chatId int64) func(w http.ResponseWrite
 
 		_, err := bot.Send(msg)
 
-		fmt.Printf("Message sended to telegram. Id: %s. Name: %s. Text: %s\n", message.ID, message.Name, message.Message)
+		fmt.Printf("Message sended to telegram. Id: %s. Text: %s\n", message.ID, message.Message)
 
 		if err != nil {
 			fmt.Println(err)
@@ -166,10 +165,8 @@ func getHttpClient() *http.Client {
 func formatMessage(message SendRequest) string {
 	text := fmt.Sprintf("*Новое сообщение*\n"+
 		"*ID* _%s_\n"+
-		"*Name* _%s_\n"+
 		"*Message* _%s_\n",
 		message.ID,
-		message.Name,
 		message.Message,
 	)
 
