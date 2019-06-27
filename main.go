@@ -24,6 +24,11 @@ type SendResponse struct {
 	Message string
 }
 
+type RabbitResponse struct {
+	Type string
+	Data SendResponse
+}
+
 func main() {
 	bot := createBot()
 
@@ -99,7 +104,12 @@ func handleRequest(bot *tgbotapi.BotAPI, chatId int64) func(w http.ResponseWrite
 
 func getRabbitSender(channel *amqp.Channel) func(message SendResponse) {
 	return func(message SendResponse) {
-		jsonMessage, _ := json.Marshal(message)
+		rabbitResponse := RabbitResponse{
+			Type: "BOT_RESPONSE",
+			Data: message,
+		}
+
+		jsonMessage, _ := json.Marshal(rabbitResponse)
 
 		err := channel.Publish(
 			"",
