@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/smtp"
 	"os"
 	"strconv"
 
@@ -36,7 +37,7 @@ func main() {
 
 	http.HandleFunc("/bot/send", handleRequest(bot, chatId))
 
-	go http.ListenAndServe(os.Getenv("BOT_PORT"), nil)
+	go http.ListenAndServe(":"+os.Getenv("BOT_PORT"), nil)
 
 	rabbitConnect := getRabbitConnect()
 
@@ -47,8 +48,40 @@ func main() {
 
 func failOnError(err error, msg string) {
 	if err != nil {
+		sendErrorToEmail(fmt.Sprintf("%s: %s", msg, err))
+
 		log.Fatalf("%s: %s", msg, err)
 	}
+}
+
+func logOnError(err error, msg string) {
+	if err != nil {
+		sendErrorToEmail(fmt.Sprintf("%s: %s", msg, err))
+
+		log.Printf("%s: %s", msg, err)
+	}
+}
+
+func sendErrorToEmail(text string) {
+	from := os.Getenv("BOT_LOG_EMAIL")
+	pass := os.Getenv("BOT_LOG_PASSWORD")
+	to := os.Getenv("BOT_LOG_EMAIL")
+
+	msg := "From: " + from + "\n" +
+		"To: " + to + "\n" +
+		"Subject: Error on telegram bot:\n\n" +
+		text
+
+	err := smtp.SendMail("smtp.gmail.com:587",
+		smtp.PlainAuth("", from, pass, "smtp.gmail.com"),
+		from, []string{to}, []byte(msg))
+
+	if err != nil {
+		log.Printf("Smtp error: %s", err)
+		return
+	}
+
+	log.Print("Email is sent")
 }
 
 func getRabbitConnect() *amqp.Connection {
@@ -77,9 +110,7 @@ func createBot() *tgbotapi.BotAPI {
 
 	bot, err := tgbotapi.NewBotAPIWithClient(os.Getenv("BOT_TOKEN"), client)
 
-	if err != nil {
-		fmt.Println(err)
-	}
+	failOnError(err, "Error connection to bot")
 
 	fmt.Printf("Authorized on account %s\n", bot.Self.UserName)
 
@@ -94,11 +125,9 @@ func handleRequest(bot *tgbotapi.BotAPI, chatId int64) func(w http.ResponseWrite
 
 		_, err := bot.Send(msg)
 
-		fmt.Printf("Message sended to telegram. Id: %s. Text: %s\n", message.ID, message.Message)
+		logOnError(err, "Handle request from backend error")
 
-		if err != nil {
-			fmt.Println(err)
-		}
+		fmt.Printf("Message sended to telegram. Id: %s. Text: %s\n", message.ID, message.Message)
 	}
 }
 
@@ -123,7 +152,7 @@ func getRabbitSender(channel *amqp.Channel) func(message SendResponse) {
 
 		fmt.Printf("Message sended to rabbitmq. Id: %s. Text: %s\n", message.ID, message.Message)
 
-		failOnError(err, "Failed to publish a message")
+		logOnError(err, "Failed to publish a message to rabbitmq")
 	}
 }
 
@@ -133,33 +162,25 @@ func handleBot(bot *tgbotapi.BotAPI, chatId int64, channel *amqp.Channel) {
 
 	updates, err := bot.GetUpdatesChan(u)
 
-	if err != nil {
-		fmt.Println(err)
-	}
+	logOnError(err, "Get updates from telegram error")
 
 	userId := "none"
 
 	for update := range updates {
 		msg, err := botUpdateProcessor(update, &userId, chatId, getRabbitSender(channel))
 
-		if err != nil {
-			fmt.Println(err)
-		}
+		logOnError(err, "Get update telegram processor error")
 
 		_, err = bot.Send(msg)
 
-		if err != nil {
-			fmt.Println(err)
-		}
+		logOnError(err, "Send message to telegram error")
 	}
 }
 
 func getHttpClient() *http.Client {
 	dialSocksProxy, err := proxy.SOCKS5("tcp", os.Getenv("BOT_PROXY"), nil, proxy.Direct)
 
-	if err != nil {
-		fmt.Println(err)
-	}
+	failOnError(err, "Connect to proxy error")
 
 	transport := &http.Transport{
 		Dial: dialSocksProxy.Dial,
@@ -190,9 +211,7 @@ func parseBody(body io.ReadCloser) SendRequest {
 
 	err := decoder.Decode(&message)
 
-	if err != nil {
-		fmt.Println(err)
-	}
+	logOnError(err, "Parse request error")
 
 	return message
 }
