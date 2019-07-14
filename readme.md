@@ -5,6 +5,7 @@
 ##  Список технологий
 
 - Язык программирования: [Go](https://golang.org/doc/)
+- [Docker](https://docs.docker.com/get-started/)
 - [Telegram Bot API](https://github.com/go-telegram-bot-api/telegram-bot-api)
 - [RabbitMQ Client Library](https://github.com/streadway/amqp)
 - [Proxy](https://github.com/elazarl/goproxy)
