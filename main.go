@@ -108,7 +108,7 @@ func getRabbitChannel(connect *amqp.Connection) *amqp.Channel {
 func createBot() *tgbotapi.BotAPI {
 	client := getHttpClient()
 
-	bot, err := tgbotapi.NewBotAPIWithClient(os.Getenv("BOT_TOKEN"), "/", client)
+	bot, err := tgbotapi.NewBotAPIWithClient(os.Getenv("BOT_TOKEN"), nil, client)
 
 	failOnError(err, "Error connection to bot")
 
