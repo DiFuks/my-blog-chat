@@ -177,8 +177,6 @@ func handleBot(bot *tgbotapi.BotAPI, chatId int64, channel *amqp.Channel) {
 }
 
 func getHttpClient() *http.Client {
-	failOnError(err, "Connect to proxy error")
-
 	transport := &http.Transport{}
 
 	client := &http.Client{
