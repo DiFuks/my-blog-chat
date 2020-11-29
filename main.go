@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/streadway/amqp"
-	"golang.org/x/net/proxy"
 )
 
 type SendRequest struct {
@@ -178,13 +177,9 @@ func handleBot(bot *tgbotapi.BotAPI, chatId int64, channel *amqp.Channel) {
 }
 
 func getHttpClient() *http.Client {
-	dialSocksProxy, err := proxy.SOCKS5("tcp", os.Getenv("BOT_PROXY"), nil, proxy.Direct)
-
 	failOnError(err, "Connect to proxy error")
 
-	transport := &http.Transport{
-		Dial: dialSocksProxy.Dial,
-	}
+	transport := &http.Transport{}
 
 	client := &http.Client{
 		Transport: transport,
